@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "testStripsMgr",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["server.py"],
+      "port": 8010,
+      "autoPort": true
+    }
+  ]
+}

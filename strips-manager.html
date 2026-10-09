@@ -1,0 +1,1558 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="혈당시험지 재고를 관리하는 개인용 앱" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="StripsMgr" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect fill='%230d9488' width='64' height='64' rx='12'/><text x='32' y='44' font-size='32' text-anchor='middle' fill='white' font-family='Arial'>🧪</text></svg>" />
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect fill='%230d9488' width='180' height='180' rx='36'/><text x='90' y='120' font-size='88' text-anchor='middle' fill='white' font-family='Arial'>🧪</text></svg>" />
+  <title>StripsMgr - 혈당시험지 재고관리</title>
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --panel: #ffffff;
+      --panel-2: #f8fafc;
+      --text: #0f172a;
+      --muted: #64748b;
+      --line: #dbe4f0;
+      --primary: #0d9488;
+      --green: #16a34a;
+      --orange: #d97706;
+      --red: #dc2626;
+      --gray: #64748b;
+      --shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .app { min-height: 100vh; display: flex; flex-direction: column; }
+    .topbar {
+      position: sticky; top: 0; z-index: 20;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; padding: 12px 16px; background: rgba(243, 246, 251, 0.92); backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--line);
+    }
+    .title { display: flex; flex-direction: column; gap: 2px; }
+    .title h1 { margin: 0; font-size: 18px; line-height: 1.1; }
+    .title .sub { color: var(--muted); font-size: 12px; }
+    .today { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .nav {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 8px; padding: 10px 12px; background: var(--panel); border-bottom: 1px solid var(--line);
+    }
+    .nav button {
+      border: 1px solid var(--line); background: var(--panel); color: var(--text);
+      border-radius: var(--radius); padding: 10px 8px; display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .nav button.active { border-color: var(--primary); color: var(--primary); background: #ecfdf5; }
+    .main { width: min(1120px, calc(100% - 24px)); margin: 12px auto 24px; display: grid; gap: 12px; min-width: 0; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
+    .section { padding: 14px; }
+    .grid { display: grid; gap: 12px; min-width: 0; }
+    .grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    @media (max-width: 960px) {
+      .grid.cols-4, .grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .grid.cols-4, .grid.cols-3, .grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .nav { grid-template-columns: repeat(2, 1fr); }
+      .main { width: calc(100% - 16px); margin-top: 8px; }
+    }
+
+    #toastContainer { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+    .toast { padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; box-shadow: 0 4px 16px rgba(0,0,0,0.15); opacity: 0; transform: translateY(8px); transition: opacity 0.2s, transform 0.2s; pointer-events: auto; white-space: nowrap; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.ok { background: #16a34a; color: #fff; }
+    .toast.err { background: #dc2626; color: #fff; }
+    .toast.info { background: #0f172a; color: #fff; }
+
+    .stat {
+      padding: 14px; border-radius: var(--radius); background: var(--panel-2); border: 1px solid var(--line);
+      display: flex; flex-direction: column; gap: 6px; min-height: 96px;
+    }
+    .stat .label { color: var(--muted); font-size: 12px; }
+    .stat .value { font-size: 26px; font-weight: 700; letter-spacing: 0; }
+    .stat .hint { font-size: 12px; color: var(--muted); }
+    .bar { height: 8px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+    .bar > span { display: block; height: 100%; border-radius: inherit; }
+    .toolbar { display: grid; gap: 8px; grid-template-columns: 1.2fr 1fr 1fr auto; }
+    .field, select, input, textarea {
+      width: 100%; border: 1px solid var(--line); background: white; color: var(--text);
+      border-radius: var(--radius); padding: 10px 12px; outline: none;
+    }
+    textarea { min-height: 92px; resize: vertical; }
+    .field:focus, select:focus, input:focus, textarea:focus { border-color: #5eead4; box-shadow: 0 0 0 3px rgba(13,148,136,.14); }
+    .btn {
+      border: 1px solid var(--line); background: white; color: var(--text);
+      border-radius: var(--radius); padding: 10px 12px; display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn.primary { background: var(--primary); color: white; border-color: var(--primary); }
+    .btn.ghost { background: transparent; }
+    .btn.danger { background: #fef2f2; color: var(--red); border-color: #fecaca; }
+    .btn.small { padding: 7px 10px; font-size: 12px; }
+    .stack { display: flex; gap: 8px; flex-wrap: wrap; }
+    .list { display: grid; gap: 10px; }
+    .item { padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: white; display: grid; gap: 8px; }
+    .item.head {
+      display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr auto; gap: 8px; align-items: center;
+      background: #f8fafc; color: var(--muted); font-size: 12px;
+    }
+    .item.row { grid-template-columns: 1.5fr 1fr 1fr 1fr auto; align-items: center; }
+    .meta { color: var(--muted); font-size: 12px; }
+    .name { font-weight: 700; }
+    .status {
+      display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px;
+      font-size: 12px; border: 1px solid transparent; white-space: nowrap;
+    }
+    .status.ready { color: #0369a1; background: #e0f2fe; border-color: #bae6fd; }
+    .status.in_use { color: #15803d; background: #dcfce7; border-color: #bbf7d0; }
+    .status.warning { color: #b45309; background: #ffedd5; border-color: #fed7aa; }
+    .status.expired { color: #b91c1c; background: #fee2e2; border-color: #fecaca; }
+    .status.archived { color: #475569; background: #e2e8f0; border-color: #cbd5e1; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; font-size: 12px; background: #f8fafc; border: 1px solid var(--line); color: var(--muted); }
+    .split { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 12px; min-width: 0; }
+    .split > * { min-width: 0; }
+    @media (max-width: 960px) { .split { grid-template-columns: 1fr; } }
+    @media (max-width: 640px) {
+      .item.head, .item.row { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+      .item.head > :nth-child(2), .item.head > :nth-child(3), .item.head > :nth-child(5),
+      .item.row > :nth-child(2), .item.row > :nth-child(3) { display: none; }
+      .item.row > div:first-child .stack { display: none; }
+      .item.row > div:first-child .name, .item.row > div:first-child .meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .item.row { padding: 10px 10px 8px; gap: 6px; }
+      .item.row .name { font-size: 13px; line-height: 1.2; }
+      .item.row .meta { font-size: 11px; line-height: 1.25; }
+      .item.row .stack { gap: 6px; }
+      .item.row .btn.small { padding: 6px 8px; font-size: 11px; }
+      .item.row > :nth-child(4) { grid-column: 2; justify-self: end; }
+      .item.head > :nth-child(4) { justify-self: start; }
+      .item.row > :nth-child(5) { grid-column: 1 / -1; justify-self: end; }
+    }
+    .hidden { display: none !important; }
+    .scanner { display: grid; gap: 10px; }
+    .scan-image { width: 100%; border: 1px solid var(--line); border-radius: var(--radius); }
+    .scan-result { padding: 10px 12px; border: 1px dashed var(--line); border-radius: var(--radius); background: #f8fafc; color: var(--muted); min-height: 44px; }
+    .form-shell { display: grid; gap: 12px; align-content: start; }
+    .form-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: nowrap; }
+    .form-actions .btn { flex: 0 0 auto; min-width: 84px; justify-content: center; }
+    dialog { border: 1px solid var(--line); border-radius: 12px; padding: 0; width: min(760px, calc(100vw - 24px)); box-shadow: 0 20px 60px rgba(15, 23, 42, 0.24); }
+    dialog::backdrop { background: rgba(15, 23, 42, 0.4); }
+    .modal-head, .modal-foot { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .modal-foot { border-top: 1px solid var(--line); border-bottom: 0; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+    .modal-body { padding: 14px 16px; display: grid; gap: 12px; }
+    .kv { display: grid; grid-template-columns: 140px 1fr; gap: 10px; align-items: center; }
+    .kv .k { color: var(--muted); font-size: 12px; }
+    .kv .v { font-weight: 600; }
+    .mini { font-size: 12px; color: var(--muted); }
+    .footer-note { color: var(--muted); font-size: 12px; padding: 2px 2px 8px; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div class="title">
+        <h1>StripsMgr</h1>
+        <div class="sub">혈당시험지 재고관리</div>
+      </div>
+      <div class="today" id="todayText"></div>
+    </div>
+    <div class="nav">
+      <button class="active" data-view="dashboard">대시보드</button>
+      <button data-view="inventory">재고 목록</button>
+      <button data-view="add">재고 추가</button>
+      <button data-view="settings">설정</button>
+    </div>
+
+    <main class="main">
+      <section id="view-dashboard" class="grid gap-12">
+        <div class="grid cols-4" id="statsRow"></div>
+        <div class="split">
+          <div class="panel section">
+            <div class="stack" style="justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <strong>우선 사용 대상</strong>
+              <span class="badge" id="priorityCount"></span>
+            </div>
+            <div class="list" id="priorityList"></div>
+          </div>
+          <div class="panel section">
+            <div class="stack" style="justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <strong>시험지 종류 현황</strong>
+              <span class="badge" id="typeCount"></span>
+            </div>
+            <div class="list" id="typeSummary"></div>
+          </div>
+        </div>
+        <div class="panel section">
+          <div class="stack" style="justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <strong>구매 예측</strong>
+            <span class="badge" id="forecastHint"></span>
+          </div>
+          <div class="list" id="forecastList"></div>
+        </div>
+      </section>
+
+      <section id="view-inventory" class="panel section hidden">
+        <div class="toolbar" style="margin-bottom: 12px;">
+          <select id="filterType"></select>
+          <select id="filterStatus">
+            <option value="">상태 전체</option>
+            <option value="ready">미개봉</option>
+            <option value="in_use">사용중</option>
+            <option value="warning">곧만료</option>
+            <option value="expired">만료</option>
+            <option value="archived">폐기</option>
+          </select>
+          <select id="sortBy">
+            <option value="effectiveAsc">실효 종료일 오름차순</option>
+            <option value="openedAsc">개봉일 오름차순</option>
+            <option value="createdDesc">등록일 최신순</option>
+          </select>
+          <button class="btn primary" id="quickAdd">+ 재고 추가</button>
+        </div>
+        <div class="list">
+          <div class="item head">
+            <div>시험지 종류 / LOT</div>
+            <div>유효기간</div>
+            <div>실효 종료일</div>
+            <div>상태</div>
+            <div>동작</div>
+          </div>
+          <div id="inventoryList" class="list"></div>
+        </div>
+      </section>
+
+      <section id="view-add" class="panel section hidden">
+        <div class="stack" style="justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <strong id="formTitle">재고 추가</strong>
+          <span class="badge" id="formModeBadge">신규 등록</span>
+        </div>
+        <div class="split">
+          <div class="panel section" style="box-shadow:none;">
+            <div class="stack" style="justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <strong>바코드 스캔</strong>
+              <span class="badge">GS1</span>
+            </div>
+            <div class="scanner">
+              <div class="stack">
+                <label class="btn primary" for="scanCaptureInput" style="cursor:pointer;">카메라로 촬영</label>
+                <input id="scanCaptureInput" type="file" accept="image/*" capture="environment" class="hidden" />
+                <label class="btn" for="scanImageInput" style="cursor:pointer;">이미지 불러오기</label>
+                <input id="scanImageInput" type="file" accept="image/*" class="hidden" />
+              </div>
+              <div class="scan-result" id="scanStatus">통(바이알)이나 박스의 바코드를 찍거나 이미지 파일을 넣으면 인식합니다.</div>
+              <img id="scanImagePreview" class="scan-image hidden" alt="scan preview" />
+              <div class="mini">인식되면 LOT, 유효기간, 시험지 종류를 가능한 범위에서 자동 채웁니다.</div>
+            </div>
+            <div class="panel section" style="box-shadow:none; margin-top:12px;">
+              <div class="stack" style="justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <strong>GS1 원문 입력</strong>
+                <span class="badge">Fallback</span>
+              </div>
+              <textarea id="gs1RawInput" placeholder="예: (01)08809126640358(17)270710(10)AD6112201"></textarea>
+              <div class="form-actions" style="padding-top: 8px;">
+                <button type="button" class="btn" id="clearGs1Raw">지우기</button>
+                <button type="button" class="btn primary" id="applyGs1Raw">해석해서 반영</button>
+              </div>
+            </div>
+          </div>
+          <form id="inventoryForm" class="form-shell">
+            <input type="hidden" id="editingId" />
+            <div class="grid cols-2">
+              <label>
+                <div class="mini">시험지 종류</div>
+                <select id="formType" required></select>
+              </label>
+              <label>
+                <div class="mini">LOT</div>
+                <input id="formLot" placeholder="예: 250701C001" />
+              </label>
+              <label>
+                <div class="mini">박스/바이알 코드</div>
+                <input id="formBoxCode" placeholder="고유 코드 (선택)" />
+              </label>
+              <label>
+                <div class="mini">유효기간</div>
+                <input id="formExpiry" type="date" required />
+              </label>
+              <label>
+                <div class="mini">개봉일</div>
+                <input id="formOpenedAt" type="date" />
+              </label>
+            </div>
+            <label style="grid-column: 1 / -1;">
+              <div class="mini">메모</div>
+              <textarea id="formNotes" placeholder="입고 메모, 특이사항"></textarea>
+            </label>
+            <div class="form-actions">
+              <button type="button" class="btn" id="cancelEdit">취소</button>
+              <button type="submit" class="btn primary">저장</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section id="view-settings" class="panel section hidden">
+        <div class="split">
+          <div class="grid" style="gap:12px;">
+            <div class="panel section" style="box-shadow:none;">
+              <strong>경고 기준</strong>
+              <div class="mini" style="margin:8px 0 10px;">만료 임박 판단 일수</div>
+              <div class="stack">
+                <input id="alertDays" type="number" min="1" step="1" style="max-width: 160px;" />
+                <button class="btn primary" id="saveAlertDays" type="button">저장</button>
+              </div>
+              <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);">
+                <div class="mini" style="margin-bottom: 8px;">구매 예측 목표 재고 개월수</div>
+                <div class="stack">
+                  <input id="forecastMonths" type="number" min="1" step="1" style="max-width: 160px;" />
+                  <button class="btn primary" id="saveForecastMonths" type="button">저장</button>
+                </div>
+                <div class="mini" style="margin-top: 6px; color: var(--muted);">최근 개봉 이력으로 계산한 월평균 사용량을 기준으로, 이 개월 수만큼 미개봉 재고를 유지하도록 구매 수량을 제안합니다.</div>
+              </div>
+              <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);">
+                <div class="mini" style="margin-bottom: 8px;">만료 임박 알림</div>
+                <button class="btn" id="notifyToggle" type="button">알림 켜기</button>
+                <div class="mini" style="margin-top: 6px; color: var(--muted);">앱 실행 중 곧만료·사용중 시험지의 임박 상태를 브라우저 알림으로 알립니다.</div>
+              </div>
+            </div>
+            <div class="panel section" style="box-shadow:none;">
+              <strong>백업 / 복원</strong>
+              <div class="stack" style="margin-top: 10px;">
+                <button class="btn" id="exportData" type="button">JSON 내보내기</button>
+                <label class="btn" for="importFile" style="cursor:pointer;">JSON 불러오기</label>
+                <input id="importFile" type="file" accept="application/json" class="hidden" />
+              </div>
+              <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line);">
+                <div class="mini" style="margin-bottom: 8px; color: var(--red);">위험 구역</div>
+                <button class="btn danger" id="resetData" type="button">데이터 초기화</button>
+                <div class="mini" style="margin-top: 6px; color: var(--muted);">재고·설정이 모두 삭제됩니다. 되돌릴 수 없습니다.</div>
+              </div>
+            </div>
+          </div>
+          <div class="panel section" style="box-shadow:none;">
+            <div class="stack" style="justify-content: space-between; align-items: center;">
+              <strong>시험지 종류 관리</strong>
+              <span class="badge" id="stripTypeTotal"></span>
+            </div>
+            <form id="typeForm" class="grid" style="gap:8px; margin-top: 12px;">
+              <input type="hidden" id="editingTypeId" />
+              <input id="typeName" placeholder="이름 (예: CareSens N)" required />
+              <input id="typeMeter" placeholder="호환 측정기 (선택)" />
+              <div class="grid cols-2">
+                <input id="typeOpenUseDays" type="number" min="1" step="1" placeholder="개봉 후 사용기간(일)" required />
+                <input id="typeColor" type="color" value="#0d9488" style="height: 42px; padding: 4px;" />
+              </div>
+              <div class="grid cols-2">
+                <input id="typeGtin" placeholder="GTIN" />
+                <input id="typeModel" placeholder="모델명" />
+              </div>
+              <input id="typePackCount" type="number" min="1" step="1" placeholder="포장 매수 (선택, 예: 50)" />
+              <div class="form-actions" style="padding-top: 4px;">
+                <button class="btn" type="button" id="cancelTypeEdit" disabled>취소</button>
+                <button class="btn primary" type="submit" id="typeSubmitBtn">시험지 종류 추가</button>
+              </div>
+            </form>
+            <div class="list" id="typeList" style="margin-top: 12px;"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="detailDialog">
+    <form method="dialog">
+      <div class="modal-head">
+        <div class="stack" style="justify-content: space-between; align-items: center;">
+          <strong id="detailTitle">상세</strong>
+          <button class="btn small" value="cancel">닫기</button>
+        </div>
+      </div>
+      <div class="modal-body" id="detailBody"></div>
+      <div class="modal-foot">
+        <button class="btn" type="button" id="detailEdit">수정</button>
+        <button class="btn" type="button" id="detailUseStart">사용 시작</button>
+        <button class="btn" type="button" id="detailUseEnd">사용 종료</button>
+        <button class="btn danger" type="button" id="detailArchive">폐기</button>
+        <button class="btn danger" type="button" id="detailDelete">삭제</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toastContainer"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/zxing-wasm@2.2.0/dist/iife/reader/index.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.23.0/umd/index.min.js"></script>
+  <script>
+    const STORAGE_KEY = 'strips_v1';
+    const DEFAULT_SETTINGS = { alertDays: 30, notifyEnabled: false, forecastMonths: 3 };
+    // GTIN은 실제 보유 제품 라벨(GS1 DataMatrix (01) 값) 기준. 제조일로부터 유효기간 24개월(라벨 사용기한에 이미 반영됨).
+    const DEFAULT_STRIP_TYPES = [
+      { id: 'caresens_n', name: '케어센스 N (CareSens N)', meter: 'CareSens N', openUseDays: 90, color: '#ea580c', gtin: '08809126640358', model: '', packCount: 50 },
+      { id: 'barozen', name: '바로잰 (Barozen)', meter: '바로잰', openUseDays: 90, color: '#2563eb', gtin: '08809126641195', model: '', packCount: 50 }
+    ];
+    const DEFAULT_STRIP_TYPE_MAP = Object.fromEntries(DEFAULT_STRIP_TYPES.map(t => [t.id, t]));
+
+    const els = {
+      todayText: document.getElementById('todayText'),
+      statsRow: document.getElementById('statsRow'),
+      priorityList: document.getElementById('priorityList'),
+      priorityCount: document.getElementById('priorityCount'),
+      typeSummary: document.getElementById('typeSummary'),
+      typeCount: document.getElementById('typeCount'),
+      forecastList: document.getElementById('forecastList'),
+      forecastHint: document.getElementById('forecastHint'),
+      inventoryList: document.getElementById('inventoryList'),
+      filterType: document.getElementById('filterType'),
+      filterStatus: document.getElementById('filterStatus'),
+      sortBy: document.getElementById('sortBy'),
+      quickAdd: document.getElementById('quickAdd'),
+      viewButtons: Array.from(document.querySelectorAll('.nav button')),
+      views: {
+        dashboard: document.getElementById('view-dashboard'),
+        inventory: document.getElementById('view-inventory'),
+        add: document.getElementById('view-add'),
+        settings: document.getElementById('view-settings')
+      },
+      editingId: document.getElementById('editingId'),
+      formType: document.getElementById('formType'),
+      formLot: document.getElementById('formLot'),
+      formBoxCode: document.getElementById('formBoxCode'),
+      formExpiry: document.getElementById('formExpiry'),
+      formOpenedAt: document.getElementById('formOpenedAt'),
+      formNotes: document.getElementById('formNotes'),
+      inventoryForm: document.getElementById('inventoryForm'),
+      formTitle: document.getElementById('formTitle'),
+      formModeBadge: document.getElementById('formModeBadge'),
+      cancelEdit: document.getElementById('cancelEdit'),
+      scanCaptureInput: document.getElementById('scanCaptureInput'),
+      scanImageInput: document.getElementById('scanImageInput'),
+      scanStatus: document.getElementById('scanStatus'),
+      scanImagePreview: document.getElementById('scanImagePreview'),
+      gs1RawInput: document.getElementById('gs1RawInput'),
+      applyGs1Raw: document.getElementById('applyGs1Raw'),
+      clearGs1Raw: document.getElementById('clearGs1Raw'),
+      alertDays: document.getElementById('alertDays'),
+      saveAlertDays: document.getElementById('saveAlertDays'),
+      forecastMonths: document.getElementById('forecastMonths'),
+      saveForecastMonths: document.getElementById('saveForecastMonths'),
+      exportData: document.getElementById('exportData'),
+      importFile: document.getElementById('importFile'),
+      stripTypeTotal: document.getElementById('stripTypeTotal'),
+      typeForm: document.getElementById('typeForm'),
+      editingTypeId: document.getElementById('editingTypeId'),
+      typeName: document.getElementById('typeName'),
+      typeMeter: document.getElementById('typeMeter'),
+      typeOpenUseDays: document.getElementById('typeOpenUseDays'),
+      typeColor: document.getElementById('typeColor'),
+      typeGtin: document.getElementById('typeGtin'),
+      typeModel: document.getElementById('typeModel'),
+      typePackCount: document.getElementById('typePackCount'),
+      typeSubmitBtn: document.getElementById('typeSubmitBtn'),
+      cancelTypeEdit: document.getElementById('cancelTypeEdit'),
+      typeList: document.getElementById('typeList'),
+      detailDialog: document.getElementById('detailDialog'),
+      detailTitle: document.getElementById('detailTitle'),
+      detailBody: document.getElementById('detailBody'),
+      detailEdit: document.getElementById('detailEdit'),
+      detailUseStart: document.getElementById('detailUseStart'),
+      detailUseEnd: document.getElementById('detailUseEnd'),
+      detailArchive: document.getElementById('detailArchive'),
+      detailDelete: document.getElementById('detailDelete')
+    };
+
+    let state = loadState();
+    let selectedId = null;
+    let scanReader = null;
+    let barcodeDetector = null;
+    let dashTypeFilter = null;
+    const _calcCache = new Map();
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          return {
+            stripTypes: structuredClone(DEFAULT_STRIP_TYPES),
+            inventory: [],
+            settings: { ...DEFAULT_SETTINGS }
+          };
+        }
+        const parsed = JSON.parse(raw);
+        return {
+          stripTypes: Array.isArray(parsed.stripTypes) && parsed.stripTypes.length
+            ? parsed.stripTypes
+            : structuredClone(DEFAULT_STRIP_TYPES),
+          inventory: Array.isArray(parsed.inventory) ? parsed.inventory : [],
+          settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) }
+        };
+      } catch {
+        return {
+          stripTypes: structuredClone(DEFAULT_STRIP_TYPES),
+          inventory: [],
+          settings: { ...DEFAULT_SETTINGS }
+        };
+      }
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function uid(prefix = 'id') {
+      return `${prefix}_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+    }
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function todayISO() { return toISODate(new Date()); }
+    function toISODate(d) {
+      const x = new Date(d);
+      x.setHours(0, 0, 0, 0);
+      return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`;
+    }
+    function fromISODate(s) {
+      if (!s) return null;
+      const d = new Date(`${s}T00:00:00`);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    function addDays(dateStr, days) {
+      const d = fromISODate(dateStr);
+      if (!d) return null;
+      d.setDate(d.getDate() + Number(days || 0));
+      return toISODate(d);
+    }
+    function minDate(a, b) {
+      if (!a) return b || '';
+      if (!b) return a || '';
+      return a <= b ? a : b;
+    }
+    function daysBetween(a, b) {
+      const da = fromISODate(a), db = fromISODate(b);
+      if (!da || !db) return null;
+      return Math.round((db - da) / 86400000);
+    }
+    function fmtDate(s) { return s ? s : '-'; }
+
+    function stripTypeById(id) {
+      return state.stripTypes.find(t => t.id === id) || DEFAULT_STRIP_TYPE_MAP[id] || null;
+    }
+    function stripTypeColor(type) {
+      if (!type) return '#64748b';
+      return type.color || DEFAULT_STRIP_TYPE_MAP[type.id]?.color || '#64748b';
+    }
+
+    // 상태 판정: 혈당시험지_재고관리_기능명세.md §7.2
+    function calc(item) {
+      if (_calcCache.has(item.id)) return _calcCache.get(item.id);
+      const type = stripTypeById(item.typeId) || { openUseDays: 0, name: '알 수 없음', color: '#64748b' };
+      const expiry = item.expiry || '';
+      const openEnd = item.openedAt ? addDays(item.openedAt, type.openUseDays) : '';
+      const effective = minDate(expiry, openEnd);
+      const today = todayISO();
+      const alertDays = Number(state.settings.alertDays || 30);
+      const remaining = effective ? daysBetween(today, effective) : null;
+
+      let status;
+      if (item.archived) status = 'archived';
+      else if (remaining != null && remaining < 0) status = 'expired';
+      else if (remaining != null && remaining <= alertDays) status = 'warning';
+      else if (item.openedAt) status = 'in_use';
+      else status = 'ready';
+
+      const result = { type, openEnd, effective, remaining, status };
+      _calcCache.set(item.id, result);
+      return result;
+    }
+
+    function statusLabel(status) {
+      return { ready: '미개봉', in_use: '사용중', warning: '곧만료', expired: '만료', archived: '폐기' }[status] || status;
+    }
+
+    // ── GS1 바코드/텍스트 파싱 ───────────────────────────────────────────
+    function yymmddToISO(raw) {
+      if (!/^\d{6}$/.test(raw || '')) return '';
+      const yy = Number(raw.slice(0, 2));
+      const mm = raw.slice(2, 4);
+      const dd = raw.slice(4, 6);
+      const year = yy < 50 ? 2000 + yy : 1900 + yy;
+      if (dd === '00') {
+        const last = new Date(year, Number(mm), 0).getDate();
+        return `${year}-${mm}-${pad(last)}`;
+      }
+      return `${year}-${mm}-${dd}`;
+    }
+
+    // GS1 AI 앵커 기반 fallback 파서 (구분자가 없는 압축 문자열도 처리)
+    function parseGs1ByAiAnchors(text) {
+      const compact = String(text || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (!compact) return {};
+      const out = {};
+      const gtinMatch = compact.match(/01(\d{14})/);
+      if (gtinMatch) out.gtin = gtinMatch[1];
+      const expiryMatch = compact.match(/17(\d{6})/);
+      if (expiryMatch) out.expiry = yymmddToISO(expiryMatch[1]);
+      const mfgMatch = compact.match(/11(\d{6})/);
+      if (mfgMatch) out.mfg = yymmddToISO(mfgMatch[1]);
+      const ai10 = compact.indexOf('10');
+      if (ai10 >= 0) {
+        const lotStart = ai10 + 2;
+        let lotEnd = compact.length;
+        for (const ai of ['21', '240', '241', '250', '30']) {
+          const pos = compact.indexOf(ai, lotStart + 1);
+          if (pos >= 0 && pos < lotEnd) lotEnd = pos;
+        }
+        if (lotEnd > lotStart) out.lot = compact.slice(lotStart, lotEnd);
+      }
+      const ai21 = compact.indexOf('21');
+      if (ai21 >= 0) {
+        const serialStart = ai21 + 2;
+        let serialEnd = compact.length;
+        for (const ai of ['240', '241', '250', '30']) {
+          const pos = compact.indexOf(ai, serialStart + 1);
+          if (pos >= 0 && pos < serialEnd) serialEnd = pos;
+        }
+        if (serialEnd > serialStart) out.serial = compact.slice(serialStart, serialEnd);
+      }
+      return out;
+    }
+
+    // "(01)...(17)...(10)...(21)..." 형식의 사람이 읽을 수 있는 GS1 텍스트 파싱
+    function parseGs1Bracketed(text) {
+      const out = {};
+      const re = /\((\d{2,4})\)([^(]+)/g;
+      let match;
+      while ((match = re.exec(text)) !== null) {
+        const ai = match[1];
+        const value = match[2].trim();
+        if (ai === '01') out.gtin = value.slice(0, 14);
+        else if (ai === '17') out.expiry = yymmddToISO(value.slice(0, 6));
+        else if (ai === '11') out.mfg = yymmddToISO(value.slice(0, 6));
+        else if (ai === '10') out.lot = value;
+        else if (ai === '21') out.serial = value;
+      }
+      return out;
+    }
+
+    function parseGs1Text(raw) {
+      const source = String(raw || '').trim();
+      if (!source) return {};
+      if (source.includes('(')) {
+        const bracketed = parseGs1Bracketed(source);
+        if (Object.keys(bracketed).length) return bracketed;
+      }
+      return parseGs1ByAiAnchors(source);
+    }
+
+    function guessStripTypeFromScan(parsed) {
+      if (parsed.gtin) {
+        const byGtin = state.stripTypes.find(t => (t.gtin || '') === parsed.gtin);
+        if (byGtin) return byGtin;
+      }
+      if (parsed.serial) {
+        const matched = state.inventory.find(it => (it.boxCode || '') === parsed.serial);
+        if (matched) return stripTypeById(matched.typeId);
+      }
+      return null;
+    }
+
+    function setScanStatus(message, tone = 'info') {
+      els.scanStatus.textContent = message;
+      els.scanStatus.style.color =
+        tone === 'ok' ? 'var(--green)' :
+        tone === 'err' ? 'var(--red)' :
+        tone === 'busy' ? 'var(--orange)' : 'var(--muted)';
+    }
+
+    function applyScanResult(rawText) {
+      const raw = String(rawText || '').trim();
+      const parsed = parseGs1Text(rawText);
+      const type = guessStripTypeFromScan(parsed);
+      if (raw) els.gs1RawInput.value = raw;
+      if (type) els.formType.value = type.id;
+      if (parsed.expiry) els.formExpiry.value = parsed.expiry;
+      if (parsed.lot) els.formLot.value = parsed.lot;
+      if (parsed.serial) els.formBoxCode.value = parsed.serial;
+      const label = [
+        type ? `종류: ${type.name}` : null,
+        parsed.expiry ? `유효기간: ${parsed.expiry}` : null,
+        parsed.lot ? `LOT: ${parsed.lot}` : null,
+        parsed.serial ? `코드: ${parsed.serial}` : null
+      ].filter(Boolean).join(' · ');
+      if (label) setScanStatus(label, 'ok');
+      else setScanStatus(`인식은 되었지만 해석하지 못했습니다: ${raw}`, 'err');
+    }
+
+    function applyGs1RawInput() {
+      const raw = els.gs1RawInput.value.trim();
+      if (!raw) { setScanStatus('GS1 원문이 비어 있습니다.', 'err'); return; }
+      applyScanResult(raw);
+    }
+
+    function ensureScanReader() {
+      if (!window.ZXing) throw new Error('ZXing 라이브러리를 불러오지 못했습니다.');
+      if (!scanReader) {
+        const ReaderClass = ZXing.BrowserDatamatrixCodeReader || ZXing.BrowserMultiFormatReader;
+        if (ReaderClass === ZXing.BrowserDatamatrixCodeReader) {
+          scanReader = new ReaderClass();
+        } else {
+          const hints = new Map();
+          if (ZXing.DecodeHintType && ZXing.BarcodeFormat) {
+            hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+              ZXing.BarcodeFormat.DATA_MATRIX, ZXing.BarcodeFormat.CODE_128,
+              ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.QR_CODE
+            ]);
+            hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+          }
+          scanReader = new ReaderClass(hints, 250);
+        }
+      }
+      return scanReader;
+    }
+
+    async function decodeWithZXingWasm(input, label = 'wasm') {
+      if (!window.ZXingWASM?.readBarcodes) return null;
+      try {
+        const results = await window.ZXingWASM.readBarcodes(input, {
+          formats: ['DataMatrix', 'Code128', 'EAN13', 'QRCode'],
+          tryHarder: true,
+          maxNumberOfSymbols: 4
+        });
+        const found = Array.isArray(results) ? results.find(r => isPlausibleScanText(r?.text)) : null;
+        if (!found?.text) return null;
+        return { text: found.text, method: `zxing-wasm:${label}` };
+      } catch {
+        return null;
+      }
+    }
+
+    async function ensureBarcodeDetector() {
+      if (!('BarcodeDetector' in window)) return null;
+      if (barcodeDetector) return barcodeDetector;
+      try {
+        barcodeDetector = new window.BarcodeDetector({ formats: ['data_matrix', 'code_128', 'ean_13', 'qr_code'] });
+        return barcodeDetector;
+      } catch {
+        return null;
+      }
+    }
+
+    async function detectWithBarcodeDetector(canvas) {
+      const detector = await ensureBarcodeDetector();
+      if (!detector) return null;
+      try {
+        const found = await detector.detect(canvas);
+        const hit = found.find(f => isPlausibleScanText(f?.rawValue));
+        if (!hit) return null;
+        return { text: hit.rawValue, method: 'BarcodeDetector' };
+      } catch {
+        return null;
+      }
+    }
+
+    function withTimeout(promise, ms) {
+      let timer = null;
+      const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`시간 초과(${ms}ms)`)), ms); });
+      return Promise.race([promise.finally(() => clearTimeout(timer)), timeout]);
+    }
+
+    function canvasToObjectUrl(canvas) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (!blob) { reject(new Error('캔버스를 이미지로 변환하지 못했습니다.')); return; }
+          resolve(URL.createObjectURL(blob));
+        }, 'image/png');
+      });
+    }
+
+    // @zxing/library의 UMD 빌드에는 decodeFromCanvas가 없다 — decodeFromImageUrl/decodeFromImageElement로 우회한다.
+    async function decodeCanvasWithReader(reader, canvas) {
+      if (typeof reader.decodeFromCanvas === 'function') {
+        try {
+          const decoded = await withTimeout(reader.decodeFromCanvas(canvas), 1100);
+          if (decoded?.text && isPlausibleScanText(decoded.text)) return { text: decoded.text, method: 'zxing-js' };
+        } catch {}
+      }
+      if (typeof reader.decodeFromImageUrl === 'function') {
+        let url = '';
+        try {
+          url = await canvasToObjectUrl(canvas);
+          const decoded = await withTimeout(reader.decodeFromImageUrl(url), 1200);
+          if (decoded?.text && isPlausibleScanText(decoded.text)) return { text: decoded.text, method: 'zxing-js' };
+        } catch {
+        } finally {
+          if (url) URL.revokeObjectURL(url);
+        }
+      }
+      if (typeof reader.decodeFromImageElement === 'function') {
+        try {
+          const img = new Image();
+          img.src = canvas.toDataURL('image/png');
+          await img.decode();
+          const decoded = await withTimeout(reader.decodeFromImageElement(img), 1200);
+          if (decoded?.text && isPlausibleScanText(decoded.text)) return { text: decoded.text, method: 'zxing-js' };
+        } catch {}
+      }
+      return null;
+    }
+
+    function isPlausibleScanText(text) {
+      const value = String(text || '').trim();
+      if (value.length < 6) return false;
+      return /[0-9]/.test(value);
+    }
+
+    function loadImageBitmap(file) {
+      return createImageBitmap(file).catch(() => new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = URL.createObjectURL(file);
+      }));
+    }
+
+    function cropCanvas(sourceCanvas, mode) {
+      const w = sourceCanvas.width, h = sourceCanvas.height;
+      let rect;
+      if (mode === 'left') rect = { x: 0, y: 0, w: w * 0.55, h };
+      else if (mode === 'center') rect = { x: w * 0.15, y: h * 0.15, w: w * 0.7, h: h * 0.7 };
+      else rect = { x: 0, y: 0, w, h };
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(rect.w));
+      canvas.height = Math.max(1, Math.round(rect.h));
+      canvas.getContext('2d').drawImage(sourceCanvas, rect.x, rect.y, rect.w, rect.h, 0, 0, canvas.width, canvas.height);
+      return canvas;
+    }
+
+    function scaleCanvas(sourceCanvas, factor) {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(sourceCanvas.width * factor));
+      canvas.height = Math.max(1, Math.round(sourceCanvas.height * factor));
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
+      return canvas;
+    }
+
+    function thresholdCanvas(sourceCanvas, invert = false) {
+      const canvas = document.createElement('canvas');
+      canvas.width = sourceCanvas.width;
+      canvas.height = sourceCanvas.height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(sourceCanvas, 0, 0);
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        let v = gray < 128 ? 0 : 255;
+        if (invert) v = 255 - v;
+        d[i] = d[i + 1] = d[i + 2] = v;
+      }
+      ctx.putImageData(img, 0, 0);
+      return canvas;
+    }
+
+    async function decodeCanvasWithHybridFallbacks(reader, baseCanvas, progressCb) {
+      const leftCrop = cropCanvas(baseCanvas, 'left');
+      const centerCrop = cropCanvas(baseCanvas, 'center');
+      const attempts = [
+        ['원본', baseCanvas],
+        ['원본 임계값', thresholdCanvas(baseCanvas)],
+        ['좌측 크롭', leftCrop],
+        ['좌측 크롭 임계값', thresholdCanvas(leftCrop)],
+        ['좌측 크롭 3배', scaleCanvas(leftCrop, 3)],
+        ['좌측 크롭 임계값 3배', scaleCanvas(thresholdCanvas(leftCrop), 3)],
+        ['중앙 크롭', centerCrop],
+        ['중앙 크롭 임계값', thresholdCanvas(centerCrop)],
+        ['원본 반전', thresholdCanvas(baseCanvas, true)]
+      ];
+      const total = attempts.length;
+      for (let i = 0; i < attempts.length; i++) {
+        const [label, canvas] = attempts[i];
+        progressCb?.(i + 1, total, label);
+        const decoded = await decodeCanvasWithReader(reader, canvas);
+        if (decoded) return decoded;
+        const native = await detectWithBarcodeDetector(canvas);
+        if (native) return native;
+      }
+      return null;
+    }
+
+    async function scanImageFile(file) {
+      if (!file) return;
+      let objectUrl = '';
+      const startedAt = performance.now();
+      try {
+        const reader = ensureScanReader();
+        objectUrl = URL.createObjectURL(file);
+        els.scanImagePreview.src = objectUrl;
+        els.scanImagePreview.classList.remove('hidden');
+        setScanStatus('① 정밀 인식 중…', 'busy');
+
+        const bitmap = await loadImageBitmap(file);
+        const canvas = document.createElement('canvas');
+        // 원본 해상도를 최대한 유지해야 DataMatrix 인식률이 떨어지지 않는다.
+        const maxSide = 2000;
+        const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+        let result = await decodeWithZXingWasm(file, 'file');
+        if (!result) {
+          result = await decodeWithZXingWasm(canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height), 'imageData');
+        }
+        if (!result) {
+          setScanStatus('② 정밀 인식 실패 — 보정 인식 시도 중…', 'busy');
+          result = await decodeCanvasWithHybridFallbacks(reader, canvas, (idx, total, label) => {
+            setScanStatus(`② 보정 인식 ${idx}/${total} — ${label}`, 'busy');
+          });
+        }
+
+        const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1);
+        if (result?.text) {
+          applyScanResult(result.text);
+        } else {
+          setScanStatus(`바코드를 인식하지 못했습니다 (${elapsed}초). 코드가 화면에 크고 선명하게 나오도록 다시 촬영하거나, GS1 원문을 직접 입력해 주세요.`, 'err');
+        }
+      } catch (err) {
+        setScanStatus(`스캔 오류: ${err?.message || err}`, 'err');
+      } finally {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+      }
+    }
+
+    // ── 렌더링 ───────────────────────────────────────────────────────────
+    function setView(name) {
+      Object.entries(els.views).forEach(([key, node]) => node.classList.toggle('hidden', key !== name));
+      els.viewButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.view === name));
+      if (name === 'add') focusFormForNew();
+    }
+
+    function renderToday() {
+      const d = new Date();
+      els.todayText.textContent = `오늘 ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+
+    function emptyRow(text) {
+      return `<div class="item" style="color:var(--muted);">${escapeHtml(text)}</div>`;
+    }
+
+    function renderStats() {
+      const items = state.inventory.map(it => ({ ...it, calc: calc(it) }));
+      const active = items.filter(it => !it.archived);
+      const ready = active.filter(it => it.calc.status === 'ready').length;
+      const inUse = active.filter(it => it.calc.status === 'in_use').length;
+      const warning = active.filter(it => it.calc.status === 'warning').length;
+      const expired = active.filter(it => it.calc.status === 'expired').length;
+      const stats = [
+        { label: '전체 재고', value: active.length, hint: '폐기 제외 기준', color: 'var(--primary)', ratio: 100 },
+        { label: '미개봉', value: ready, hint: '바로 사용할 수 있는 재고', color: '#0ea5e9', ratio: active.length ? (ready / active.length) * 100 : 0 },
+        { label: '사용중', value: inUse, hint: '현재 개봉해서 사용 중', color: '#22c55e', ratio: active.length ? (inUse / active.length) * 100 : 0 },
+        { label: '곧만료 / 만료', value: `${warning} / ${expired}`, hint: '우선 사용·폐기 확인', color: 'var(--orange)', ratio: active.length ? ((warning + expired) / active.length) * 100 : 0 }
+      ];
+      els.statsRow.innerHTML = stats.map(s => `
+        <div class="stat">
+          <div class="label">${s.label}</div>
+          <div class="value">${s.value}</div>
+          <div class="hint">${s.hint}</div>
+          <div class="bar"><span style="width:${Math.min(100, s.ratio)}%; background:${s.color};"></span></div>
+        </div>
+      `).join('');
+
+      const alertDays = Number(state.settings.alertDays || 30);
+      const priorityBase = items
+        .filter(it => !it.archived)
+        .filter(it => it.calc.effective && it.calc.remaining != null && it.calc.remaining <= alertDays)
+        .sort((a, b) => compareItems(a, b, 'effectiveAsc'))
+        .slice(0, 8);
+      const priority = dashTypeFilter ? priorityBase.filter(it => it.typeId === dashTypeFilter) : priorityBase;
+      const filterLabel = dashTypeFilter
+        ? ` <span class="badge" style="background:#ecfdf5;color:var(--primary);border-color:#99f6e4;cursor:pointer;" id="dashTypeFilterClear">✕ ${escapeHtml(stripTypeById(dashTypeFilter)?.name || '')}</span>`
+        : '';
+      els.priorityCount.innerHTML = `${priorityBase.length}개${filterLabel}`;
+      els.priorityList.innerHTML = priority.length
+        ? priority.map(renderMiniItem).join('')
+        : emptyRow(dashTypeFilter ? '해당 종류의 임박 재고가 없습니다.' : `만료 임박 판단 일수(${alertDays}일) 이내 재고가 없습니다.`);
+      document.getElementById('dashTypeFilterClear')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dashTypeFilter = null;
+        renderStats();
+      });
+
+      const typeCounts = state.stripTypes.map(type => {
+        const list = items.filter(it => it.typeId === type.id && !it.archived);
+        const color = stripTypeColor(type);
+        return {
+          type, color, count: list.length,
+          warning: list.filter(it => it.calc.status === 'warning').length,
+          inUse: list.filter(it => it.calc.status === 'in_use').length
+        };
+      });
+      els.typeCount.textContent = `${typeCounts.length}종`;
+      els.typeSummary.innerHTML = typeCounts.length ? typeCounts.map(({ type, color, count, warning, inUse }) => {
+        const selected = dashTypeFilter === type.id;
+        const selStyle = selected ? `outline:2px solid ${color}; background:${color}14;` : '';
+        return `
+        <div class="item" data-dash-type="${escapeAttr(type.id)}"
+          style="grid-template-columns: 1fr auto; align-items: center; border-left:4px solid ${color}; cursor:pointer; ${selStyle}">
+          <div>
+            <div class="name">
+              <span class="badge" style="background:${color}22; color:${color}; border-color:${color}33; margin-right:6px;">■</span>${escapeHtml(type.name)}
+              ${selected ? `<span class="meta" style="color:var(--primary); margin-left:6px;">필터 중 — 클릭해서 해제</span>` : ''}
+            </div>
+            <div class="meta">개봉 후 ${type.openUseDays}일 · 곧만료 ${warning}개 · 사용중 ${inUse}개</div>
+          </div>
+          <div class="badge" style="background:${color}14; color:${color}; border-color:${color}33;">${count}개</div>
+        </div>`;
+      }).join('') : emptyRow('시험지 종류가 없습니다.');
+
+      els.typeSummary.querySelectorAll('[data-dash-type]').forEach(el => {
+        el.addEventListener('click', () => {
+          const typeId = el.dataset.dashType;
+          dashTypeFilter = dashTypeFilter === typeId ? null : typeId;
+          renderStats();
+        });
+      });
+
+      renderForecast();
+    }
+
+    // 개봉 이력(openedAt) 기준 월평균 사용량 계산 — 개봉 시점을 "그 달에 1개 소비 시작"으로 집계한다.
+    function computeUsageStats(typeId) {
+      const events = state.inventory.filter(it => it.typeId === typeId && it.openedAt);
+      if (!events.length) return null;
+      const months = events.map(it => it.openedAt.slice(0, 7));
+      const earliest = months.reduce((a, b) => (a < b ? a : b));
+      const nowMonth = todayISO().slice(0, 7);
+      const [ey, em] = earliest.split('-').map(Number);
+      const [ny, nm] = nowMonth.split('-').map(Number);
+      const monthSpan = Math.max(1, (ny - ey) * 12 + (nm - em) + 1);
+      return { count: events.length, monthSpan, avg: events.length / monthSpan, firstMonth: earliest };
+    }
+
+    function renderForecast() {
+      const targetMonths = Number(state.settings.forecastMonths || 3);
+      els.forecastHint.textContent = `목표 ${targetMonths}개월분 기준`;
+
+      const rows = state.stripTypes.map(type => {
+        const color = stripTypeColor(type);
+        const readyCount = state.inventory.filter(it =>
+          it.typeId === type.id && !it.openedAt && !it.archived && calc(it).status !== 'expired'
+        ).length;
+        const usage = computeUsageStats(type.id);
+        if (!usage || usage.avg <= 0) {
+          return { type, color, readyCount, insufficient: true };
+        }
+        const monthsLeft = readyCount / usage.avg;
+        const suggestedQty = Math.max(0, Math.ceil(usage.avg * targetMonths - readyCount));
+        return { type, color, readyCount, usage, monthsLeft, suggestedQty, lowConfidence: usage.monthSpan < 2 };
+      });
+
+      els.forecastList.innerHTML = rows.length ? rows.map(row => {
+        if (row.insufficient) {
+          return `
+            <div class="item" style="grid-template-columns: 1fr auto; align-items: center; border-left:4px solid ${row.color};">
+              <div>
+                <div class="name"><span class="badge" style="background:${row.color}22; color:${row.color}; border-color:${row.color}33; margin-right:6px;">■</span>${escapeHtml(row.type.name)}</div>
+                <div class="meta">개봉 이력이 없어 월평균 사용량을 계산할 수 없습니다. (미개봉 ${row.readyCount}개 보유)</div>
+              </div>
+              <span class="badge">데이터 부족</span>
+            </div>`;
+        }
+        const monthsLeftLabel = row.monthsLeft >= 99 ? '99개월+' : `${row.monthsLeft.toFixed(1)}개월`;
+        const needsPurchase = row.suggestedQty > 0;
+        const actionBadge = needsPurchase
+          ? `<span class="badge" style="background:#ffedd5; color:var(--orange); border-color:#fed7aa;">${row.suggestedQty}개 구매 권장</span>`
+          : `<span class="badge" style="background:#dcfce7; color:#15803d; border-color:#bbf7d0;">재고 충분</span>`;
+        return `
+          <div class="item" style="grid-template-columns: 1fr auto; align-items: center; border-left:4px solid ${row.color};">
+            <div>
+              <div class="name"><span class="badge" style="background:${row.color}22; color:${row.color}; border-color:${row.color}33; margin-right:6px;">■</span>${escapeHtml(row.type.name)}</div>
+              <div class="meta">
+                월평균 사용 ${row.usage.avg.toFixed(1)}개 (최근 ${row.usage.monthSpan}개월, 개봉 ${row.usage.count}건)${row.lowConfidence ? ' · 데이터 적음(참고용)' : ''}
+                · 미개봉 ${row.readyCount}개 · 예상 소진까지 ${monthsLeftLabel}
+              </div>
+            </div>
+            ${actionBadge}
+          </div>`;
+      }).join('') : emptyRow('시험지 종류가 없습니다.');
+    }
+
+    function renderStatusTag(c) {
+      return `<span class="status ${c.status}">${statusLabel(c.status)}</span>`;
+    }
+
+    function renderMiniItem(item) {
+      const c = item.calc;
+      const type = stripTypeById(item.typeId);
+      const typeColor = stripTypeColor(type);
+      return `
+        <div class="item" style="grid-template-columns: 1fr auto; align-items: center; border-left:4px solid ${typeColor};">
+          <div>
+            <div class="name"><span class="badge" style="background:${typeColor}22; color:${typeColor}; border-color:${typeColor}33; margin-right:6px;">■</span>${escapeHtml(type?.name || '알 수 없음')}</div>
+            <div class="meta">
+              ${item.lot ? `LOT ${escapeHtml(item.lot)} · ` : ''}유효기간 ${fmtDate(item.expiry)}
+              ${item.openedAt ? ` · 개봉 ${fmtDate(item.openedAt)} ~ ${fmtDate(c.openEnd)}` : ''}
+              ${c.remaining != null ? ` (${c.remaining >= 0 ? `D-${c.remaining}` : `D+${Math.abs(c.remaining)}`})` : ''}
+            </div>
+          </div>
+          ${renderStatusTag(c)}
+        </div>
+      `;
+    }
+
+    // 우선 사용 순서: 혈당시험지_재고관리_기능명세.md §8.3
+    function compareItems(a, b, sortBy) {
+      const ca = a.calc || calc(a);
+      const cb = b.calc || calc(b);
+      if (sortBy === 'openedAsc') {
+        const ax = a.openedAt || '9999-12-31';
+        const bx = b.openedAt || '9999-12-31';
+        if (ax !== bx) return ax.localeCompare(bx);
+        return (ca.effective || '9999-12-31').localeCompare(cb.effective || '9999-12-31');
+      }
+      if (sortBy === 'createdDesc') {
+        return (b.createdAt || '').localeCompare(a.createdAt || '');
+      }
+      const ea = ca.effective || '9999-12-31';
+      const eb = cb.effective || '9999-12-31';
+      if (ea !== eb) return ea.localeCompare(eb);
+      const aInUse = !!a.openedAt, bInUse = !!b.openedAt;
+      if (aInUse !== bInUse) return aInUse ? -1 : 1;
+      const ao = a.openedAt || '9999-12-31', bo = b.openedAt || '9999-12-31';
+      if (ao !== bo) return ao.localeCompare(bo);
+      return (a.createdAt || '').localeCompare(b.createdAt || '');
+    }
+
+    function renderInventory() {
+      const typeFilter = els.filterType.value;
+      const statusFilter = els.filterStatus.value;
+      const sortBy = els.sortBy.value;
+      const list = state.inventory
+        .map(it => ({ ...it, calc: calc(it) }))
+        .filter(it => !typeFilter || it.typeId === typeFilter)
+        .filter(it => !statusFilter || it.calc.status === statusFilter)
+        .sort((a, b) => compareItems(a, b, sortBy));
+
+      els.inventoryList.innerHTML = list.length ? list.map(item => {
+        const type = stripTypeById(item.typeId);
+        const typeColor = stripTypeColor(type);
+        const c = item.calc;
+        return `
+          <div class="item row" style="border-left:4px solid ${typeColor};">
+            <div>
+              <div class="name"><span class="badge" style="background:${typeColor}22; color:${typeColor}; border-color:${typeColor}33; margin-right:6px;">■</span>${escapeHtml(type?.name || '알 수 없음')}</div>
+              <div class="meta">${item.lot ? `LOT ${escapeHtml(item.lot)}` : 'LOT 없음'} · 개봉 후 ${type ? `${type.openUseDays}일` : '-'}</div>
+              ${item.openedAt ? `<div class="meta">개봉일 ${fmtDate(item.openedAt)} ~ ${fmtDate(c.openEnd)}</div>` : ''}
+            </div>
+            <div>
+              <div>${fmtDate(item.expiry)}</div>
+            </div>
+            <div>
+              <div>${fmtDate(c.effective)}</div>
+              <div class="meta">${c.remaining != null ? (c.remaining >= 0 ? `D-${c.remaining}` : `D+${Math.abs(c.remaining)}`) : '-'}</div>
+            </div>
+            <div>${renderStatusTag(c)}</div>
+            <div class="stack">
+              <button class="btn small" data-action="detail" data-id="${item.id}">상세</button>
+              <button class="btn small" data-action="edit" data-id="${item.id}">수정</button>
+            </div>
+          </div>
+        `;
+      }).join('') : emptyRow('조건에 맞는 재고가 없습니다.');
+    }
+
+    function renderTypeSelects() {
+      const opts = state.stripTypes.map(t => `<option value="${escapeAttr(t.id)}">${escapeHtml(t.name)} · ${t.openUseDays}일</option>`).join('');
+      const prevFormType = els.formType.value;
+      const prevFilterType = els.filterType.value;
+      els.formType.innerHTML = `<option value="">선택</option>${opts}`;
+      els.filterType.innerHTML = `<option value="">시험지 종류 전체</option>${opts}`;
+      if (prevFormType && state.stripTypes.some(t => t.id === prevFormType)) els.formType.value = prevFormType;
+      if (prevFilterType && state.stripTypes.some(t => t.id === prevFilterType)) els.filterType.value = prevFilterType;
+    }
+
+    function renderSettings() {
+      els.alertDays.value = state.settings.alertDays ?? 30;
+      els.forecastMonths.value = state.settings.forecastMonths ?? 3;
+      updateNotifyToggleUI();
+      els.stripTypeTotal.textContent = `${state.stripTypes.length}종`;
+      els.typeList.innerHTML = state.stripTypes.map(type => `
+        <div class="item" style="grid-template-columns: 1fr auto; align-items: center;">
+          <div>
+            <div class="name"><span class="badge" style="background:${stripTypeColor(type)}22; color:${stripTypeColor(type)}; border-color:${stripTypeColor(type)}33; margin-right:6px;">■</span>${escapeHtml(type.name)}</div>
+            <div class="meta">${escapeHtml(type.meter || '측정기 미지정')} · 개봉 후 ${type.openUseDays}일${type.packCount ? ` · ${type.packCount}매입` : ''} · GTIN ${escapeHtml(type.gtin || '-')} · 모델 ${escapeHtml(type.model || '-')}</div>
+          </div>
+          <div class="stack">
+            <button class="btn small" data-edit-type="${type.id}">수정</button>
+            <button class="btn small danger" data-remove-type="${type.id}">삭제</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function rerender() {
+      _calcCache.clear();
+      renderToday();
+      renderStats();
+      renderInventory();
+      renderSettings();
+      renderTypeSelects();
+    }
+
+    // ── 상세 / CRUD ─────────────────────────────────────────────────────
+    function focusFormForNew() {
+      els.formTitle.textContent = '재고 추가';
+      els.formModeBadge.textContent = '신규 등록';
+      els.editingId.value = '';
+      els.inventoryForm.reset();
+      els.formExpiry.value = todayISO();
+      els.formType.value = '';
+      els.scanStatus.textContent = '통(바이알)이나 박스의 바코드를 찍거나 이미지 파일을 넣으면 인식합니다.';
+      els.scanImagePreview.classList.add('hidden');
+      els.scanImagePreview.removeAttribute('src');
+      els.gs1RawInput.value = '';
+    }
+
+    function openEdit(item) {
+      setView('add');
+      els.formTitle.textContent = '재고 수정';
+      els.formModeBadge.textContent = '수정 모드';
+      els.editingId.value = item.id;
+      els.formType.value = item.typeId;
+      els.formLot.value = item.lot || '';
+      els.formBoxCode.value = item.boxCode || '';
+      els.formExpiry.value = item.expiry || '';
+      els.formOpenedAt.value = item.openedAt || '';
+      els.formNotes.value = item.notes || '';
+    }
+
+    function showDetail(id) {
+      const item = state.inventory.find(x => x.id === id);
+      if (!item) return;
+      selectedId = id;
+      const c = calc(item);
+      const type = stripTypeById(item.typeId);
+      els.detailTitle.textContent = type?.name || '상세';
+      els.detailBody.innerHTML = `
+        <div class="kv"><div class="k">시험지 종류</div><div class="v">${escapeHtml(type?.name || '-')}</div></div>
+        <div class="kv"><div class="k">LOT</div><div class="v">${escapeHtml(item.lot || '-')}</div></div>
+        <div class="kv"><div class="k">박스/바이알 코드</div><div class="v">${escapeHtml(item.boxCode || '-')}</div></div>
+        <div class="kv"><div class="k">유효기간</div><div class="v">${fmtDate(item.expiry)}</div></div>
+        <div class="kv"><div class="k">개봉일</div><div class="v">${fmtDate(item.openedAt)}</div></div>
+        <div class="kv"><div class="k">개봉 후 사용기간</div><div class="v">${type?.openUseDays ?? '-'}일${item.openedAt ? ` (종료일 ${fmtDate(c.openEnd)})` : ''}</div></div>
+        <div class="kv"><div class="k">실효 종료일</div><div class="v">${fmtDate(c.effective)}${c.remaining != null ? ` <span class="meta">(${c.remaining >= 0 ? `D-${c.remaining}` : `D+${Math.abs(c.remaining)}`})</span>` : ''}</div></div>
+        <div class="kv"><div class="k">상태</div><div class="v">${renderStatusTag(c)}</div></div>
+        <div class="kv"><div class="k">메모</div><div class="v">${escapeHtml(item.notes || '-')}</div></div>
+      `;
+      els.detailEdit.onclick = () => { els.detailDialog.close(); openEdit(item); };
+      els.detailUseStart.onclick = () => { els.detailDialog.close(); updateItem(id, { openedAt: todayISO() }); showToast('사용을 시작했습니다.'); };
+      els.detailUseEnd.onclick = () => { els.detailDialog.close(); updateItem(id, { archived: true, archivedAt: todayISO() }); showToast('사용을 종료 처리했습니다.'); };
+      els.detailArchive.onclick = () => { els.detailDialog.close(); updateItem(id, { archived: true, archivedAt: todayISO() }); showToast('폐기 처리했습니다.'); };
+      els.detailDelete.onclick = () => deleteItem(id);
+      els.detailDialog.showModal();
+    }
+
+    function updateItem(id, patch) {
+      const idx = state.inventory.findIndex(x => x.id === id);
+      if (idx < 0) return;
+      state.inventory[idx] = { ...state.inventory[idx], ...patch };
+      saveState();
+      rerender();
+    }
+
+    function deleteItem(id) {
+      const item = state.inventory.find(x => x.id === id);
+      if (!item) return;
+      const type = stripTypeById(item.typeId);
+      if (!confirm(`정말 삭제할까요?\n\n시험지: ${type?.name || item.typeId}\nLOT: ${item.lot || '-'}\n\n이 동작은 되돌릴 수 없습니다.`)) return;
+      state.inventory = state.inventory.filter(x => x.id !== id);
+      saveState();
+      selectedId = null;
+      rerender();
+      try { els.detailDialog.close(); } catch {}
+    }
+
+    function resetTypeForm() {
+      els.editingTypeId.value = '';
+      els.typeForm.reset();
+      els.typeColor.value = '#0d9488';
+      els.typeSubmitBtn.textContent = '시험지 종류 추가';
+      els.cancelTypeEdit.disabled = true;
+    }
+
+    function openTypeEdit(type) {
+      els.editingTypeId.value = type.id;
+      els.typeName.value = type.name || '';
+      els.typeMeter.value = type.meter || '';
+      els.typeOpenUseDays.value = type.openUseDays || 0;
+      els.typeColor.value = type.color || '#0d9488';
+      els.typeGtin.value = type.gtin || '';
+      els.typeModel.value = type.model || '';
+      els.typePackCount.value = type.packCount || '';
+      els.typeSubmitBtn.textContent = '시험지 종류 저장';
+      els.cancelTypeEdit.disabled = false;
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? '')
+        .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+    }
+    function escapeAttr(s) { return escapeHtml(s).replaceAll('`', '&#96;'); }
+
+    function showToast(msg, tone = 'ok') {
+      const container = document.getElementById('toastContainer');
+      const el = document.createElement('div');
+      el.className = `toast ${tone}`;
+      el.textContent = msg;
+      container.appendChild(el);
+      requestAnimationFrame(() => { requestAnimationFrame(() => { el.classList.add('show'); }); });
+      setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 220); }, 2200);
+    }
+
+    // ── 이벤트 바인딩 ────────────────────────────────────────────────────
+    els.viewButtons.forEach(btn => btn.addEventListener('click', () => setView(btn.dataset.view)));
+    els.quickAdd.addEventListener('click', () => setView('add'));
+    els.cancelEdit.addEventListener('click', () => setView('inventory'));
+    els.scanCaptureInput.addEventListener('change', (e) => scanImageFile(e.target.files?.[0]));
+    els.scanImageInput.addEventListener('change', (e) => scanImageFile(e.target.files?.[0]));
+    els.applyGs1Raw.addEventListener('click', applyGs1RawInput);
+    els.clearGs1Raw.addEventListener('click', () => {
+      els.gs1RawInput.value = '';
+      setScanStatus('GS1 원문 입력을 지웠습니다.', 'info');
+    });
+    els.filterType.addEventListener('change', renderInventory);
+    els.filterStatus.addEventListener('change', renderInventory);
+    els.sortBy.addEventListener('change', renderInventory);
+
+    els.inventoryList.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const id = btn.dataset.id;
+      const item = state.inventory.find(x => x.id === id);
+      if (!item) return;
+      if (btn.dataset.action === 'detail') showDetail(id);
+      if (btn.dataset.action === 'edit') openEdit(item);
+    });
+
+    els.inventoryForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const id = els.editingId.value || uid('inv');
+      const payload = {
+        id,
+        typeId: els.formType.value,
+        lot: els.formLot.value.trim(),
+        boxCode: els.formBoxCode.value.trim(),
+        expiry: els.formExpiry.value,
+        openedAt: els.formOpenedAt.value || '',
+        notes: els.formNotes.value.trim(),
+        archived: false,
+        createdAt: new Date().toISOString()
+      };
+      const idx = state.inventory.findIndex(x => x.id === id);
+      if (idx >= 0) state.inventory[idx] = { ...state.inventory[idx], ...payload };
+      else state.inventory.unshift(payload);
+      saveState();
+      focusFormForNew();
+      setView('inventory');
+      rerender();
+      showToast('재고를 저장했습니다.');
+    });
+
+    els.typeForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const name = els.typeName.value.trim();
+      const openUseDays = Number(els.typeOpenUseDays.value);
+      if (!name || !openUseDays) return;
+      const id = els.editingTypeId.value || uid('type');
+      const payload = {
+        id, name,
+        meter: els.typeMeter.value.trim(),
+        openUseDays,
+        color: els.typeColor.value || '#0d9488',
+        gtin: els.typeGtin.value.trim(),
+        model: els.typeModel.value.trim(),
+        packCount: Number(els.typePackCount.value) || null
+      };
+      const idx = state.stripTypes.findIndex(t => t.id === id);
+      if (idx >= 0) state.stripTypes[idx] = payload;
+      else state.stripTypes.push(payload);
+      saveState();
+      resetTypeForm();
+      rerender();
+    });
+
+    els.cancelTypeEdit.addEventListener('click', resetTypeForm);
+
+    els.typeList.addEventListener('click', (e) => {
+      const editBtn = e.target.closest('button[data-edit-type]');
+      if (editBtn) {
+        const type = state.stripTypes.find(t => t.id === editBtn.dataset.editType);
+        if (type) openTypeEdit(type);
+        return;
+      }
+      const btn = e.target.closest('button[data-remove-type]');
+      if (!btn) return;
+      const id = btn.dataset.removeType;
+      if (state.inventory.some(it => it.typeId === id)) {
+        alert('이 시험지 종류를 참조하는 재고가 있어 삭제할 수 없습니다.');
+        return;
+      }
+      state.stripTypes = state.stripTypes.filter(t => t.id !== id);
+      saveState();
+      rerender();
+    });
+
+    els.saveAlertDays.addEventListener('click', () => {
+      const v = Math.max(1, Number(els.alertDays.value || 30));
+      state.settings.alertDays = v;
+      saveState();
+      rerender();
+      showToast('경고 기준을 저장했습니다.');
+    });
+
+    els.saveForecastMonths.addEventListener('click', () => {
+      const v = Math.max(1, Number(els.forecastMonths.value || 3));
+      state.settings.forecastMonths = v;
+      saveState();
+      rerender();
+      showToast('구매 예측 기준을 저장했습니다.');
+    });
+
+    // ── 만료 임박 알림 ───────────────────────────────────────────────────
+    function updateNotifyToggleUI() {
+      const btn = document.getElementById('notifyToggle');
+      if (!btn) return;
+      if (!('Notification' in window)) {
+        btn.textContent = '이 브라우저는 알림 미지원';
+        btn.disabled = true;
+        return;
+      }
+      const enabled = state.settings.notifyEnabled && Notification.permission === 'granted';
+      btn.textContent = enabled ? '알림 끄기' : '알림 켜기';
+      btn.classList.toggle('primary', !enabled);
+    }
+
+    document.getElementById('notifyToggle').addEventListener('click', async () => {
+      if (!('Notification' in window)) return;
+      const enabled = state.settings.notifyEnabled && Notification.permission === 'granted';
+      if (enabled) {
+        state.settings.notifyEnabled = false;
+        saveState();
+        showToast('알림을 껐습니다.', 'info');
+      } else {
+        const perm = await Notification.requestPermission();
+        if (perm !== 'granted') { showToast('브라우저 알림 권한이 거부되었습니다.', 'err'); return; }
+        state.settings.notifyEnabled = true;
+        saveState();
+        showToast('알림을 켰습니다.');
+        checkAndNotify();
+      }
+      updateNotifyToggleUI();
+    });
+
+    function checkAndNotify() {
+      if (!('Notification' in window)) return;
+      if (!state.settings.notifyEnabled || Notification.permission !== 'granted') return;
+      const today = todayISO();
+      const notifiedKey = 'strips_notified';
+      let notified = {};
+      try { notified = JSON.parse(localStorage.getItem(notifiedKey) || '{}'); } catch {}
+      Object.keys(notified).forEach(k => { if (notified[k] !== today) delete notified[k]; });
+
+      state.inventory.filter(it => !it.archived).forEach(it => {
+        const c = calc(it);
+        const type = stripTypeById(it.typeId);
+        const name = type?.name || '시험지';
+        if (c.status === 'warning' || c.status === 'expired') {
+          const tag = `${it.id}_${c.status}`;
+          if (!notified[tag]) {
+            new Notification(c.status === 'expired' ? '혈당시험지 유효기간 만료' : '혈당시험지 유효기간 임박', {
+              body: `${name}${it.lot ? ` (LOT ${it.lot})` : ''} 실효 종료일 ${c.effective}`,
+              tag
+            });
+            notified[tag] = today;
+          }
+        }
+      });
+      try { localStorage.setItem(notifiedKey, JSON.stringify(notified)); } catch {}
+    }
+
+    // ── 백업 / 복원 ──────────────────────────────────────────────────────
+    els.exportData.addEventListener('click', () => {
+      const data = { version: 1, exportedAt: new Date().toISOString(), ...state };
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `stripsmgr-backup-${todayISO()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    els.importFile.addEventListener('change', async () => {
+      const file = els.importFile.files?.[0];
+      if (!file) return;
+      try {
+        const parsed = JSON.parse(await file.text());
+        state = {
+          stripTypes: Array.isArray(parsed.stripTypes) && parsed.stripTypes.length ? parsed.stripTypes : structuredClone(DEFAULT_STRIP_TYPES),
+          inventory: Array.isArray(parsed.inventory) ? parsed.inventory : [],
+          settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) }
+        };
+        saveState();
+        rerender();
+        alert('복원이 완료되었습니다.');
+      } catch {
+        alert('JSON 파일을 읽을 수 없습니다.');
+      } finally {
+        els.importFile.value = '';
+      }
+    });
+
+    document.getElementById('resetData').addEventListener('click', () => {
+      if (!confirm('모든 재고·설정이 삭제됩니다.\n정말 초기화할까요?')) return;
+      if (!confirm('두 번째 확인입니다.\n되돌릴 수 없습니다. 계속할까요?')) return;
+      localStorage.removeItem(STORAGE_KEY);
+      state = {
+        stripTypes: structuredClone(DEFAULT_STRIP_TYPES),
+        inventory: [],
+        settings: { ...DEFAULT_SETTINGS }
+      };
+      dashTypeFilter = null;
+      saveState();
+      rerender();
+      showToast('데이터가 초기화되었습니다.', 'info');
+    });
+
+    // ── 초기화 ───────────────────────────────────────────────────────────
+    if (!state.stripTypes.length) state.stripTypes = structuredClone(DEFAULT_STRIP_TYPES);
+    saveState();
+    resetTypeForm();
+    focusFormForNew();
+    rerender();
+    setView('dashboard');
+    renderToday();
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('service-worker.js').catch(() => {});
+    }
+
+    updateNotifyToggleUI();
+    checkAndNotify();
+    setInterval(checkAndNotify, 3600000);
+  </script>
+</body>
+</html>
