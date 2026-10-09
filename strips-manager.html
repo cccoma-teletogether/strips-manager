@@ -142,6 +142,7 @@
     .hidden { display: none !important; }
     .scanner { display: grid; gap: 10px; }
     .scan-image { width: 100%; border: 1px solid var(--line); border-radius: var(--radius); }
+    .scan-video { width: 100%; aspect-ratio: 4 / 3; background: #0f172a; border: 1px solid var(--line); border-radius: var(--radius); object-fit: cover; }
     .scan-result { padding: 10px 12px; border: 1px dashed var(--line); border-radius: var(--radius); background: #f8fafc; color: var(--muted); min-height: 44px; }
     .form-shell { display: grid; gap: 12px; align-content: start; }
     .form-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: nowrap; }
@@ -245,12 +246,17 @@
             </div>
             <div class="scanner">
               <div class="stack">
-                <label class="btn primary" for="scanCaptureInput" style="cursor:pointer;">카메라로 촬영</label>
-                <input id="scanCaptureInput" type="file" accept="image/*" capture="environment" class="hidden" />
+                <button type="button" class="btn primary" id="liveScanBtn">실시간 카메라로 스캔</button>
                 <label class="btn" for="scanImageInput" style="cursor:pointer;">이미지 불러오기</label>
                 <input id="scanImageInput" type="file" accept="image/*" class="hidden" />
               </div>
-              <div class="scan-result" id="scanStatus">통(바이알)이나 박스의 바코드를 찍거나 이미지 파일을 넣으면 인식합니다.</div>
+              <div id="liveScanBox" class="hidden">
+                <video id="liveScanVideo" class="scan-video" autoplay playsinline muted></video>
+                <div class="stack" style="margin-top:8px;">
+                  <button type="button" class="btn danger small" id="liveScanStopBtn">카메라 중지</button>
+                </div>
+              </div>
+              <div class="scan-result" id="scanStatus">실시간 카메라 스캔 또는 이미지 불러오기로 바코드를 인식합니다.</div>
               <img id="scanImagePreview" class="scan-image hidden" alt="scan preview" />
               <div class="mini">인식되면 LOT, 유효기간, 시험지 종류를 가능한 범위에서 자동 채웁니다.</div>
             </div>
@@ -435,7 +441,10 @@
       formTitle: document.getElementById('formTitle'),
       formModeBadge: document.getElementById('formModeBadge'),
       cancelEdit: document.getElementById('cancelEdit'),
-      scanCaptureInput: document.getElementById('scanCaptureInput'),
+      liveScanBtn: document.getElementById('liveScanBtn'),
+      liveScanStopBtn: document.getElementById('liveScanStopBtn'),
+      liveScanBox: document.getElementById('liveScanBox'),
+      liveScanVideo: document.getElementById('liveScanVideo'),
       scanImageInput: document.getElementById('scanImageInput'),
       scanStatus: document.getElementById('scanStatus'),
       scanImagePreview: document.getElementById('scanImagePreview'),
@@ -476,6 +485,9 @@
     let scanReader = null;
     let barcodeDetector = null;
     let dashTypeFilter = null;
+    let liveScanStream = null;
+    let liveScanTimer = null;
+    let liveScanActive = false;
     const _calcCache = new Map();
 
     function loadState() {
@@ -887,6 +899,62 @@
       return null;
     }
 
+    // ── 실시간 카메라 스캔 ───────────────────────────────────────────────
+    // 파일 입력의 capture="environment"는 기기/브라우저에 따라 카메라 대신
+    // 갤러리 선택창을 띄우는 경우가 있어, getUserMedia로 직접 카메라를 열어 제어한다.
+    async function startLiveScan() {
+      if (liveScanActive) return;
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setScanStatus('이 브라우저는 실시간 카메라 스캔을 지원하지 않습니다. 이미지 불러오기를 이용해 주세요.', 'err');
+        return;
+      }
+      try {
+        liveScanStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false
+        });
+      } catch (err) {
+        setScanStatus(`카메라를 열지 못했습니다: ${err?.message || err}. 이미지 불러오기를 이용해 주세요.`, 'err');
+        return;
+      }
+      liveScanActive = true;
+      els.liveScanBox.classList.remove('hidden');
+      els.liveScanVideo.srcObject = liveScanStream;
+      setScanStatus('바코드를 화면 중앙에 크고 선명하게 비춰 주세요…', 'busy');
+
+      const reader = ensureScanReader();
+      const canvas = document.createElement('canvas');
+      let busy = false;
+      liveScanTimer = setInterval(async () => {
+        if (!liveScanActive || busy) return;
+        const video = els.liveScanVideo;
+        if (video.readyState < 2 || !video.videoWidth) return;
+        busy = true;
+        try {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          let result = await decodeWithZXingWasm(ctx.getImageData(0, 0, canvas.width, canvas.height), 'live');
+          if (!result) result = await decodeCanvasWithReader(reader, canvas);
+          if (result?.text) {
+            stopLiveScan();
+            applyScanResult(result.text);
+          }
+        } finally {
+          busy = false;
+        }
+      }, 700);
+    }
+
+    function stopLiveScan() {
+      liveScanActive = false;
+      if (liveScanTimer) { clearInterval(liveScanTimer); liveScanTimer = null; }
+      if (liveScanStream) { liveScanStream.getTracks().forEach(t => t.stop()); liveScanStream = null; }
+      if (els.liveScanVideo) els.liveScanVideo.srcObject = null;
+      els.liveScanBox?.classList.add('hidden');
+    }
+
     async function scanImageFile(file) {
       if (!file) return;
       let objectUrl = '';
@@ -933,6 +1001,7 @@
 
     // ── 렌더링 ───────────────────────────────────────────────────────────
     function setView(name) {
+      if (name !== 'add') stopLiveScan();
       Object.entries(els.views).forEach(([key, node]) => node.classList.toggle('hidden', key !== name));
       els.viewButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.view === name));
       if (name === 'add') focusFormForNew();
@@ -1325,7 +1394,8 @@
     els.viewButtons.forEach(btn => btn.addEventListener('click', () => setView(btn.dataset.view)));
     els.quickAdd.addEventListener('click', () => setView('add'));
     els.cancelEdit.addEventListener('click', () => setView('inventory'));
-    els.scanCaptureInput.addEventListener('change', (e) => scanImageFile(e.target.files?.[0]));
+    els.liveScanBtn.addEventListener('click', startLiveScan);
+    els.liveScanStopBtn.addEventListener('click', () => { stopLiveScan(); setScanStatus('카메라 스캔을 중지했습니다.', 'info'); });
     els.scanImageInput.addEventListener('change', (e) => scanImageFile(e.target.files?.[0]));
     els.applyGs1Raw.addEventListener('click', applyGs1RawInput);
     els.clearGs1Raw.addEventListener('click', () => {
