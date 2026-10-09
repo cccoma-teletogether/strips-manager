@@ -212,6 +212,13 @@
       </section>
 
       <section id="view-inventory" class="panel section hidden">
+        <div class="panel section hidden" id="invCurrentUsePanel" style="box-shadow:none; margin-bottom:12px;">
+          <div class="stack" style="justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <strong>현재 사용중인 시험지</strong>
+            <span class="badge" id="invCurrentUseCount"></span>
+          </div>
+          <div class="list" id="invCurrentUseList"></div>
+        </div>
         <div class="toolbar" style="margin-bottom: 12px;">
           <select id="filterType"></select>
           <select id="filterStatus">
@@ -443,6 +450,9 @@
       currentUsePanel: document.getElementById('currentUsePanel'),
       currentUseCount: document.getElementById('currentUseCount'),
       currentUseList: document.getElementById('currentUseList'),
+      invCurrentUsePanel: document.getElementById('invCurrentUsePanel'),
+      invCurrentUseCount: document.getElementById('invCurrentUseCount'),
+      invCurrentUseList: document.getElementById('invCurrentUseList'),
       priorityList: document.getElementById('priorityList'),
       priorityCount: document.getElementById('priorityCount'),
       typeSummary: document.getElementById('typeSummary'),
@@ -1126,14 +1136,7 @@
         </div>
       `).join('');
 
-      const inUseItems = active.filter(it => it.openedAt).sort((a, b) => compareItems(a, b, 'effectiveAsc'));
-      if (inUseItems.length) {
-        els.currentUsePanel.classList.remove('hidden');
-        els.currentUseCount.textContent = `${inUseItems.length}개`;
-        els.currentUseList.innerHTML = inUseItems.map(renderMiniItem).join('');
-      } else {
-        els.currentUsePanel.classList.add('hidden');
-      }
+      renderCurrentUsePanel(els.currentUsePanel, els.currentUseCount, els.currentUseList);
 
       const alertDays = Number(state.settings.alertDays || 30);
       const priorityBase = items
@@ -1277,6 +1280,24 @@
       `;
     }
 
+    function computeInUseItems() {
+      return state.inventory
+        .map(it => ({ ...it, calc: calc(it) }))
+        .filter(it => !it.archived && it.openedAt)
+        .sort((a, b) => compareItems(a, b, 'effectiveAsc'));
+    }
+
+    function renderCurrentUsePanel(panelEl, countEl, listEl) {
+      const inUseItems = computeInUseItems();
+      if (inUseItems.length) {
+        panelEl.classList.remove('hidden');
+        countEl.textContent = `${inUseItems.length}개`;
+        listEl.innerHTML = inUseItems.map(renderMiniItem).join('');
+      } else {
+        panelEl.classList.add('hidden');
+      }
+    }
+
     // 우선 사용 순서: 혈당시험지_재고관리_기능명세.md §8.3
     function compareItems(a, b, sortBy) {
       const ca = a.calc || calc(a);
@@ -1301,6 +1322,7 @@
     }
 
     function renderInventory() {
+      renderCurrentUsePanel(els.invCurrentUsePanel, els.invCurrentUseCount, els.invCurrentUseList);
       const typeFilter = els.filterType.value;
       const statusFilter = els.filterStatus.value;
       const sortBy = els.sortBy.value;
