@@ -1,5 +1,5 @@
 // StripsMgr Service Worker — 네트워크 우선, 실패 시 캐시 fallback
-const CACHE_NAME = 'stripsmgr-v1';
+const CACHE_NAME = 'stripsmgr-v2';
 const PRECACHE_URLS = [
   './strips-manager.html',
   './index.html',
