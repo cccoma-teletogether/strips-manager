@@ -1300,6 +1300,7 @@
             <div>
               <div class="name"><span class="badge" style="background:${typeColor}22; color:${typeColor}; border-color:${typeColor}33; margin-right:6px;">■</span>${escapeHtml(type?.name || '알 수 없음')}</div>
               <div class="meta">${item.lot ? `LOT ${escapeHtml(item.lot)}` : 'LOT 없음'} · 개봉 후 ${type ? `${type.openUseDays}일` : '-'}</div>
+              <div class="meta">유효기간 ${fmtDate(item.expiry)}</div>
               ${item.openedAt ? `<div class="meta">개봉일 ${fmtDate(item.openedAt)} ~ ${fmtDate(c.openEnd)}</div>` : ''}
             </div>
             <div>
