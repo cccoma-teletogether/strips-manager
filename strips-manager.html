@@ -45,7 +45,7 @@
     .title .sub { color: var(--muted); font-size: 12px; }
     .today { color: var(--muted); font-size: 12px; white-space: nowrap; }
     .nav {
-      display: grid; grid-template-columns: repeat(4, 1fr);
+      display: grid; grid-template-columns: repeat(5, 1fr);
       gap: 8px; padding: 10px 12px; background: var(--panel); border-bottom: 1px solid var(--line);
     }
     .nav button {
@@ -66,7 +66,7 @@
     @media (max-width: 640px) {
       .topbar { align-items: flex-start; flex-direction: column; }
       .grid.cols-4, .grid.cols-3, .grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .nav { grid-template-columns: repeat(2, 1fr); }
+      .nav { grid-template-columns: repeat(3, 1fr); }
       .main { width: calc(100% - 16px); margin-top: 8px; }
     }
 
@@ -172,6 +172,7 @@
       <button class="active" data-view="dashboard">대시보드</button>
       <button data-view="inventory">재고 목록</button>
       <button data-view="add">재고 추가</button>
+      <button data-view="worklog">작업기록</button>
       <button data-view="settings">설정</button>
     </div>
 
@@ -308,6 +309,23 @@
         </div>
       </section>
 
+      <section id="view-worklog" class="panel section hidden">
+        <div class="panel section" style="box-shadow:none;">
+          <div class="stack" style="justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <strong>프로그램 작업기록</strong>
+            <span class="badge" id="changelogCount"></span>
+          </div>
+          <div class="grid" style="gap:10px; margin-bottom:12px;">
+            <div class="mini">`changelog.md` 기준으로 프로그램 수정 내역을 표시합니다.</div>
+            <div class="stack">
+              <span class="badge" id="changelogStatus">불러오는 중</span>
+              <button type="button" class="btn" id="reloadChangelog">새로고침</button>
+            </div>
+          </div>
+          <div class="list" id="changelogList"></div>
+        </div>
+      </section>
+
       <section id="view-settings" class="panel section hidden">
         <div class="split">
           <div class="grid" style="gap:12px;">
@@ -408,6 +426,9 @@
       { id: 'barozen', name: '바로잰 (Barozen)', meter: '바로잰', openUseDays: 90, color: '#2563eb', gtin: '08809126641195', model: '', packCount: 50 }
     ];
     const DEFAULT_STRIP_TYPE_MAP = Object.fromEntries(DEFAULT_STRIP_TYPES.map(t => [t.id, t]));
+    const DEFAULT_CHANGELOG_ENTRIES = [
+      { title: 'TASK-001 2026-10-10 최초 배포', items: ['changelog.md를 불러오지 못했을 때 표시되는 기본 작업기록입니다.'] }
+    ];
 
     const els = {
       todayText: document.getElementById('todayText'),
@@ -428,6 +449,7 @@
         dashboard: document.getElementById('view-dashboard'),
         inventory: document.getElementById('view-inventory'),
         add: document.getElementById('view-add'),
+        worklog: document.getElementById('view-worklog'),
         settings: document.getElementById('view-settings')
       },
       editingId: document.getElementById('editingId'),
@@ -451,6 +473,10 @@
       gs1RawInput: document.getElementById('gs1RawInput'),
       applyGs1Raw: document.getElementById('applyGs1Raw'),
       clearGs1Raw: document.getElementById('clearGs1Raw'),
+      changelogStatus: document.getElementById('changelogStatus'),
+      reloadChangelog: document.getElementById('reloadChangelog'),
+      changelogList: document.getElementById('changelogList'),
+      changelogCount: document.getElementById('changelogCount'),
       alertDays: document.getElementById('alertDays'),
       saveAlertDays: document.getElementById('saveAlertDays'),
       forecastMonths: document.getElementById('forecastMonths'),
@@ -488,6 +514,7 @@
     let liveScanStream = null;
     let liveScanTimer = null;
     let liveScanActive = false;
+    let changelogEntries = structuredClone(DEFAULT_CHANGELOG_ENTRIES);
     const _calcCache = new Map();
 
     function loadState() {
@@ -1016,6 +1043,57 @@
       return `<div class="item" style="color:var(--muted);">${escapeHtml(text)}</div>`;
     }
 
+    // ── 작업기록 ─────────────────────────────────────────────────────────
+    function parseChangelogMarkdown(markdown) {
+      const lines = String(markdown || '').split(/\r?\n/);
+      const entries = [];
+      let current = null;
+      for (const line of lines) {
+        if (line.startsWith('## ')) {
+          if (current) entries.push(current);
+          current = { title: line.slice(3).trim(), items: [] };
+          continue;
+        }
+        if (!current) continue;
+        if (line.startsWith('- ')) current.items.push(line.slice(2).trim());
+      }
+      if (current) entries.push(current);
+      return entries;
+    }
+
+    async function loadChangelog() {
+      els.changelogStatus.textContent = '불러오는 중';
+      try {
+        const response = await fetch(`changelog.md?v=${encodeURIComponent(todayISO())}`, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const markdown = await response.text();
+        const parsed = parseChangelogMarkdown(markdown);
+        changelogEntries = parsed.length ? parsed : structuredClone(DEFAULT_CHANGELOG_ENTRIES);
+        els.changelogStatus.textContent = parsed.length ? '동기화 완료' : '기본 내역 표시';
+      } catch {
+        changelogEntries = structuredClone(DEFAULT_CHANGELOG_ENTRIES);
+        els.changelogStatus.textContent = '기본 내역 표시';
+      }
+      renderChangelog();
+    }
+
+    function renderChangelog() {
+      const logs = changelogEntries?.length ? changelogEntries : DEFAULT_CHANGELOG_ENTRIES;
+      els.changelogCount.textContent = `${logs.length}건`;
+      if (!logs.length) {
+        els.changelogList.innerHTML = emptyRow('표시할 작업기록이 없습니다.');
+        return;
+      }
+      els.changelogList.innerHTML = logs.map(entry => `
+        <div class="item" style="display:block;">
+          <div class="name">${escapeHtml(entry.title || '-')}</div>
+          <div style="margin-top:8px; display:grid; gap:6px;">
+            ${(entry.items || []).map(item => `<div class="meta">- ${escapeHtml(item)}</div>`).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
     function renderStats() {
       const items = state.inventory.map(it => ({ ...it, calc: calc(it) }));
       const active = items.filter(it => !it.archived);
@@ -1275,6 +1353,7 @@
       renderToday();
       renderStats();
       renderInventory();
+      renderChangelog();
       renderSettings();
       renderTypeSelects();
     }
@@ -1405,6 +1484,7 @@
     els.filterType.addEventListener('change', renderInventory);
     els.filterStatus.addEventListener('change', renderInventory);
     els.sortBy.addEventListener('change', renderInventory);
+    els.reloadChangelog.addEventListener('click', loadChangelog);
 
     els.inventoryList.addEventListener('click', (e) => {
       const btn = e.target.closest('button[data-action]');
@@ -1613,6 +1693,7 @@
     resetTypeForm();
     focusFormForNew();
     rerender();
+    loadChangelog();
     setView('dashboard');
     renderToday();
 
