@@ -179,6 +179,13 @@
     <main class="main">
       <section id="view-dashboard" class="grid gap-12">
         <div class="grid cols-4" id="statsRow"></div>
+        <div class="panel section hidden" id="currentUsePanel">
+          <div class="stack" style="justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <strong>현재 사용중인 시험지</strong>
+            <span class="badge" id="currentUseCount"></span>
+          </div>
+          <div class="list" id="currentUseList"></div>
+        </div>
         <div class="split">
           <div class="panel section">
             <div class="stack" style="justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -433,6 +440,9 @@
     const els = {
       todayText: document.getElementById('todayText'),
       statsRow: document.getElementById('statsRow'),
+      currentUsePanel: document.getElementById('currentUsePanel'),
+      currentUseCount: document.getElementById('currentUseCount'),
+      currentUseList: document.getElementById('currentUseList'),
       priorityList: document.getElementById('priorityList'),
       priorityCount: document.getElementById('priorityCount'),
       typeSummary: document.getElementById('typeSummary'),
@@ -1115,6 +1125,15 @@
           <div class="bar"><span style="width:${Math.min(100, s.ratio)}%; background:${s.color};"></span></div>
         </div>
       `).join('');
+
+      const inUseItems = active.filter(it => it.openedAt).sort((a, b) => compareItems(a, b, 'effectiveAsc'));
+      if (inUseItems.length) {
+        els.currentUsePanel.classList.remove('hidden');
+        els.currentUseCount.textContent = `${inUseItems.length}개`;
+        els.currentUseList.innerHTML = inUseItems.map(renderMiniItem).join('');
+      } else {
+        els.currentUsePanel.classList.add('hidden');
+      }
 
       const alertDays = Number(state.settings.alertDays || 30);
       const priorityBase = items
