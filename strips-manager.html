@@ -1702,6 +1702,10 @@
       navigator.serviceWorker.register('service-worker.js').catch(() => {});
     }
 
+    // 브라우저가 저장 공간 부족 시 이 사이트의 데이터를 먼저 비우지 않도록 "영구 저장"을 요청한다.
+    // (홈 화면에 추가하거나 자주 방문하면 대부분 자동으로 허용된다.)
+    navigator.storage?.persist?.().catch(() => {});
+
     updateNotifyToggleUI();
     checkAndNotify();
     setInterval(checkAndNotify, 3600000);
